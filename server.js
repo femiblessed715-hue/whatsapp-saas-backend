@@ -22,7 +22,6 @@ app.get('/api/vendor/:slug', async (req, res) => {
   try {
     const { slug } = req.params;
 
-    // Fetch vendor details by slug
     const { data: vendor, error: vendorErr } = await supabase
       .from('vendors')
       .select('*')
@@ -37,7 +36,6 @@ app.get('/api/vendor/:slug', async (req, res) => {
       return res.status(404).json({ error: 'Vendor not found in database', queried_slug: slug });
     }
 
-    // Fetch products belonging to vendor
     const { data: products, error: productErr } = await supabase
       .from('products')
       .select('*')
@@ -53,10 +51,35 @@ app.get('/api/vendor/:slug', async (req, res) => {
   }
 });
 
-// 3. Create Order API Endpoint
+// 3. Add a New Product Endpoint (For Vendors)
+app.post('/api/products', async (req, res) => {
+  try {
+    const { vendor_id, title, price, image_url } = req.body;
+
+    if (!vendor_id || !title || !price) {
+      return res.status(400).json({ error: 'Missing required fields (vendor_id, title, price)' });
+    }
+
+    const { data, error } = await supabase
+      .from('products')
+      .insert([{ vendor_id, title, price, image_url: image_url || '' }])
+      .select()
+      .single();
+
+    if (error) {
+      return res.status(500).json({ error: 'Failed to add product', details: error.message });
+    }
+
+    res.json({ message: 'Product added successfully', product: data });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error', message: err.message });
+  }
+});
+
+// 4. Create Order API Endpoint
 app.post('/api/orders', async (req, res) => {
   try {
-    const { vendor_id, customer_name, customer_phone, items } = req.body;
+    const { vendor_id, items } = req.body;
 
     const { data: vendor, error: vendorErr } = await supabase
       .from('vendors')
@@ -81,17 +104,7 @@ app.post('/api/orders', async (req, res) => {
       }
     }
 
-    const { data: order, error: orderErr } = await supabase
-      .from('orders')
-      .insert([{ vendor_id, customer_name, customer_phone, total_amount: totalAmount }])
-      .select()
-      .single();
-
-    if (orderErr) {
-      return res.status(500).json({ error: 'Failed to create order' });
-    }
-
-    res.json({ message: 'Order created successfully', order });
+    res.json({ message: 'Order calculated successfully', totalAmount });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
   }
@@ -101,3 +114,4 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+          
