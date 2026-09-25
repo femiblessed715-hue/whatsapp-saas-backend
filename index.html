@@ -3,36 +3,77 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Storefront</title>
+    <title>WhatsApp Storefront & SaaS</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-50 flex flex-col min-h-screen">
 
-    <!-- Header -->
-    <header class="bg-white shadow-sm sticky top-0 z-50 p-4 flex justify-between items-center">
-        <h1 id="store-title" class="text-xl font-bold text-gray-800">Loading Store...</h1>
-        <div class="bg-green-600 text-white px-3 py-1 rounded-full text-sm font-semibold">
-            <span id="cart-count">0</span> items
+    <!-- Header & Navigation Tabs -->
+    <header class="bg-white shadow-sm sticky top-0 z-50 p-4">
+        <div class="max-w-md mx-auto flex justify-between items-center mb-2">
+            <h1 id="store-title" class="text-xl font-bold text-gray-800">Kicks & Fits</h1>
+            <div id="cart-badge" class="bg-green-600 text-white px-3 py-1 rounded-full text-sm font-semibold">
+                <span id="cart-count">0</span> items
+            </div>
+        </div>
+        <div class="max-w-md mx-auto flex space-x-2 border-b pb-2">
+            <button onclick="switchTab('store')" id="tab-store" class="flex-1 py-1.5 text-sm font-semibold rounded-lg bg-gray-900 text-white">Storefront</button>
+            <button onclick="switchTab('admin')" id="tab-admin" class="flex-1 py-1.5 text-sm font-semibold rounded-lg bg-gray-200 text-gray-700">Vendor Upload</button>
         </div>
     </header>
 
-    <!-- Main Content -->
+    <!-- Main Content Area -->
     <main class="flex-grow p-4 max-w-md mx-auto w-full">
-        <div id="loading-state" class="text-center py-12">
-            <p class="text-gray-500">Loading catalog...</p>
+        
+        <!-- STOREFRONT VIEW -->
+        <div id="view-store">
+            <div id="loading-state" class="text-center py-12">
+                <p class="text-gray-500">Loading catalog...</p>
+            </div>
+
+            <div id="error-state" class="hidden text-center py-12">
+                <p class="text-red-600 font-medium mb-2">Failed to load catalog.</p>
+                <p id="error-details" class="text-xs text-gray-400 mb-4"></p>
+                <button onclick="loadStore()" class="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm">Tap to Retry</button>
+            </div>
+
+            <div id="product-list" class="space-y-4 hidden"></div>
         </div>
 
-        <div id="error-state" class="hidden text-center py-12">
-            <p class="text-red-600 font-medium mb-2">Failed to load catalog.</p>
-            <p id="error-details" class="text-xs text-gray-400 mb-4"></p>
-            <button onclick="loadStore()" class="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm">Tap to Retry</button>
+        <!-- VENDOR ADMIN VIEW -->
+        <div id="view-admin" class="hidden">
+            <div class="bg-white p-4 rounded-xl shadow-sm border space-y-4">
+                <h2 class="text-md font-bold text-gray-800">Add Product to Catalog</h2>
+                <p class="text-xs text-gray-500">Paste your Vendor UUID (found in Supabase vendors table) and list a new item.</p>
+                
+                <form id="product-form" onsubmit="uploadProduct(event)" class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">Vendor ID (UUID)</label>
+                        <input type="text" id="admin-vendor-id" placeholder="e.g. a0eebc99-9c0b..." required class="w-full p-2.5 text-sm border rounded-lg bg-gray-50">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">Product Title</label>
+                        <input type="text" id="admin-title" placeholder="e.g. Nike Air Jordan" required class="w-full p-2.5 text-sm border rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">Price (₦)</label>
+                        <input type="number" id="admin-price" placeholder="e.g. 45000" required class="w-full p-2.5 text-sm border rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">Image URL</label>
+                        <input type="url" id="admin-image" placeholder="https://images.unsplash.com/..." required class="w-full p-2.5 text-sm border rounded-lg">
+                    </div>
+                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-semibold text-sm transition">
+                        Publish Product
+                    </button>
+                </form>
+            </div>
         </div>
 
-        <div id="product-list" class="space-y-4 hidden"></div>
     </main>
 
-    <!-- Footer Checkout -->
-    <footer class="bg-white border-t p-4 sticky bottom-0 shadow-lg">
+    <!-- Footer Checkout (Only visible on Store view) -->
+    <footer id="store-footer" class="bg-white border-t p-4 sticky bottom-0 shadow-lg">
         <div class="max-w-md mx-auto flex justify-between items-center mb-3">
             <span class="text-gray-600 font-medium">Total</span>
             <span id="cart-total" class="text-xl font-bold text-gray-900">₦0.00</span>
@@ -47,8 +88,34 @@
         const VENDOR_SLUG = 'kicks-fits';
 
         let products = [];
-        let cart = {}; // key: product_id, value: { product, quantity }
+        let cart = {};
         let vendorData = null;
+
+        function switchTab(tab) {
+            const storeView = document.getElementById('view-store');
+            const adminView = document.getElementById('view-admin');
+            const tabStore = document.getElementById('tab-store');
+            const tabAdmin = document.getElementById('tab-admin');
+            const footer = document.getElementById('store-footer');
+            const badge = document.getElementById('cart-badge');
+
+            if (tab === 'store') {
+                storeView.classList.remove('hidden');
+                adminView.classList.add('hidden');
+                footer.classList.remove('hidden');
+                badge.classList.remove('hidden');
+                tabStore.className = 'flex-1 py-1.5 text-sm font-semibold rounded-lg bg-gray-900 text-white';
+                tabAdmin.className = 'flex-1 py-1.5 text-sm font-semibold rounded-lg bg-gray-200 text-gray-700';
+                loadStore();
+            } else {
+                storeView.classList.add('hidden');
+                adminView.classList.remove('hidden');
+                footer.classList.add('hidden');
+                badge.classList.add('hidden');
+                tabAdmin.className = 'flex-1 py-1.5 text-sm font-semibold rounded-lg bg-gray-900 text-white';
+                tabStore.className = 'flex-1 py-1.5 text-sm font-semibold rounded-lg bg-gray-200 text-gray-700';
+            }
+        }
 
         async function loadStore() {
             const loadingEl = document.getElementById('loading-state');
@@ -67,6 +134,11 @@
                 vendorData = data.vendor;
                 products = data.products;
 
+                // Pre-fill admin vendor ID text field if user visits admin tab later
+                if(vendorData && vendorData.id) {
+                    document.getElementById('admin-vendor-id').value = vendorData.id;
+                }
+
                 document.getElementById('store-title').textContent = vendorData.store_name || 'Storefront';
                 renderProducts();
 
@@ -82,6 +154,11 @@
         function renderProducts() {
             const container = document.getElementById('product-list');
             container.innerHTML = '';
+
+            if (products.length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-400 py-8">No products found in catalog.</p>';
+                return;
+            }
 
             products.forEach(product => {
                 const qty = cart[product.id] ? cart[product.id].quantity : 0;
@@ -131,7 +208,6 @@
             let totalCount = 0;
             let totalPrice = 0;
 
-            Object.values(cart.forEach ? Object.values(cart) : []).forEach(item => {}); // safe iterator
             for (const id in cart) {
                 totalCount += cart[id].quantity;
                 totalPrice += cart[id].product.price * cart[id].quantity;
@@ -139,6 +215,38 @@
 
             document.getElementById('cart-count').textContent = totalCount;
             document.getElementById('cart-total').textContent = `₦${totalPrice.toLocaleString()}`;
+        }
+
+        async function uploadProduct(event) {
+            event.preventDefault();
+            const payload = {
+                vendor_id: document.getElementById('admin-vendor-id').value,
+                title: document.getElementById('admin-title').value,
+                price: Number(document.getElementById('admin-price').value),
+                image_url: document.getElementById('admin-image').value
+            };
+
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/products`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+                if (res.ok) {
+                    alert('Product successfully uploaded to store!');
+                    document.getElementById('product-form').reset();
+                    // Re-fill vendor id
+                    if(vendorData && vendorData.id) {
+                        document.getElementById('admin-vendor-id').value = vendorData.id;
+                    }
+                } else {
+                    alert('Error: ' + (data.error || 'Failed to upload'));
+                }
+            } catch(e) {
+                alert('Network error while uploading product.');
+            }
         }
 
         function checkoutWhatsApp() {
