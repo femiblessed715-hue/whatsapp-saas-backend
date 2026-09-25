@@ -6,36 +6,36 @@
   <title>Storefront</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-50 min-h-screen pb-24 text-gray-800">
+<body class="bg-gray-100 font-sans pb-24">
 
   <!-- Header -->
-  <header class="bg-white border-b sticky top-0 z-10 px-4 py-3 shadow-sm">
-    <div class="max-w-md mx-auto flex justify-between items-center">
-      <h1 id="store-name" class="text-xl font-bold text-gray-900">Loading Store...</h1>
-      <span id="cart-badge" class="bg-green-600 text-white text-xs font-bold px-2.5 py-1 rounded-full">0 items</span>
-    </div>
+  <header class="bg-white shadow-sm sticky top-0 z-10 px-4 py-3 flex justify-between items-center">
+    <h1 id="store-name" class="text-xl font-bold text-gray-800">Loading Store...</h1>
+    <span id="cart-count" class="bg-green-600 text-white text-xs font-bold px-2.5 py-1 rounded-full">0 items</span>
   </header>
 
-  <!-- Product Catalog Container -->
-  <main class="max-w-md mx-auto p-4 space-y-4" id="product-list">
-    <div class="text-center py-10 text-gray-500">Loading products...</div>
+  <!-- Product List Container -->
+  <main class="max-w-md mx-auto p-4">
+    <div id="product-list" class="space-y-4">
+      <div id="loading-status" class="text-center py-12 text-gray-500">
+        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mb-2"></div>
+        <p id="status-text">Connecting to store server...</p>
+      </div>
+    </div>
   </main>
 
-  <!-- Checkout Bar -->
-  <div class="fixed bottom-0 left-0 right-0 bg-white border-t p-4 shadow-lg">
-    <div class="max-w-md mx-auto flex items-center justify-between">
-      <div>
-        <p class="text-xs text-gray-500">Total</p>
-        <p id="total-price" class="text-lg font-extrabold text-green-700">₦0.00</p>
-      </div>
-      <button onclick="checkout()" class="bg-green-600 hover:bg-green-700 text-white font-bold px-6 py-3 rounded-xl transition shadow">
-        Order via WhatsApp
-      </button>
+  <!-- Fixed Bottom Bar / Checkout -->
+  <footer class="fixed bottom-0 left-0 right-0 bg-white border-t p-4 shadow-lg max-w-md mx-auto">
+    <div class="flex justify-between items-center mb-2">
+      <span class="text-sm text-gray-500">Total</span>
+      <span id="total-price" class="text-lg font-bold text-gray-900">₦0.00</span>
     </div>
-  </div>
+    <button onclick="checkoutWhatsApp()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition">
+      Order via WhatsApp
+    </button>
+  </footer>
 
   <script>
-    // Replace with your exact Render backend base URL
     const BACKEND_URL = 'https://whatsapp-saas-backend-vy2l.onrender.com';
     const STORE_SLUG = 'kicks-fits';
 
@@ -43,77 +43,120 @@
     let products = [];
     let cart = {};
 
-    async function loadStore() {
+    async function loadStore(retries = 6) {
+      const statusText = document.getElementById('status-text');
+      
       try {
         const res = await fetch(`${BACKEND_URL}/api/vendor/${STORE_SLUG}`);
-        const data = await res.json();
         
+        if (!res.ok) {
+          throw new Error(`Server status: ${res.status}`);
+        }
+
+        const data = await res.json();
         if (data.error) throw new Error(data.error);
 
         vendorData = data.vendor;
-        products = data.products;
+        products = data.products || [];
 
-        document.getElementById('store-name').innerText = vendorData.store_name;
+        document.getElementById('store-name').innerText = vendorData.store_name || 'Store';
         renderProducts();
       } catch (err) {
-        document.getElementById('product-list').innerHTML = `<div class="text-red-500 text-center py-8">Failed to load store catalog.</div>`;
+        if (retries > 0) {
+          if (statusText) {
+            statusText.innerText = `Waking up server... retrying (${7 - retries}/6)`;
+          }
+          setTimeout(() => loadStore(retries - 1), 4000);
+        } else {
+          document.getElementById('product-list').innerHTML = `
+            <div class="text-center py-10">
+              <p class="text-red-500 font-medium mb-2">Failed to load catalog.</p>
+              <p class="text-xs text-gray-400 mb-4">${err.message}</p>
+              <button onclick="location.reload()" class="bg-gray-800 text-white text-xs px-4 py-2 rounded-lg">Tap to Retry</button>
+            </div>`;
+        }
       }
     }
 
     function renderProducts() {
-      const list = document.getElementById('product-list');
-      list.innerHTML = products.map(p => `
-        <div class="bg-white border rounded-2xl p-4 shadow-sm flex items-center gap-4">
-          <img src="${p.image_url}" class="w-20 h-20 object-cover rounded-xl bg-gray-100" alt="${p.title}">
-          <div class="flex-1">
-            <h3 class="font-bold text-gray-900">${p.title}</h3>
-            <p class="text-green-700 font-extrabold mt-1">₦${Number(p.price).toLocaleString()}</p>
+      const container = document.getElementById('product-list');
+      
+      if (!products.length) {
+        container.innerHTML = `<div class="text-center text-gray-500 py-8">No products found in this store.</div>`;
+        return;
+      }
+
+      container.innerHTML = products.map(p => `
+        <div class="bg-white p-4 rounded-2xl shadow-sm border flex items-center space-x-4">
+          <img src="${p.image_url || 'https://via.placeholder.com/100'}" class="w-20 h-20 object-cover rounded-xl bg-gray-100 flex-shrink-0" alt="${p.name}">
+          <div class="flex-1 min-w-0">
+            <h3 class="font-bold text-gray-800 truncate">${p.name}</h3>
+            <p class="text-sm font-semibold text-green-600 mt-1">₦${Number(p.price).toLocaleString()}</p>
           </div>
-          <div class="flex items-center gap-2">
-            <button onclick="updateCart('${p.id}', -1)" class="w-8 h-8 rounded-lg bg-gray-200 text-gray-700 font-bold">-</button>
-            <span id="qty-${p.id}" class="font-semibold text-sm">0</span>
-            <button onclick="updateCart('${p.id}', 1)" class="w-8 h-8 rounded-lg bg-green-600 text-white font-bold">+</button>
+          <div class="flex items-center space-x-2">
+            <button onclick="updateQty(${p.id}, -1)" class="w-8 h-8 rounded-lg bg-gray-100 font-bold text-gray-600 flex items-center justify-center">-</button>
+            <span id="qty-${p.id}" class="font-bold text-sm w-4 text-center">0</span>
+            <button onclick="updateQty(${p.id}, 1)" class="w-8 h-8 rounded-lg bg-green-600 font-bold text-white flex items-center justify-center">+</button>
           </div>
         </div>
       `).join('');
     }
 
-    function updateCart(id, change) {
-      cart[id] = (cart[id] || 0) + change;
+    function updateQty(id, delta) {
+      cart[id] = (cart[id] || 0) + delta;
       if (cart[id] <= 0) delete cart[id];
 
-      document.getElementById(`qty-${id}`).innerText = cart[id] || 0;
-      
-      let totalCount = Object.values(cart).reduce((a, b) => a + b, 0);
-      let totalPrice = Object.entries(cart).reduce((sum, [pId, qty]) => {
-        let prod = products.find(p => p.id === pId);
-        return sum + (prod ? prod.price * qty : 0);
-      }, 0);
+      const qtyEl = document.getElementById(`qty-${id}`);
+      if (qtyEl) qtyEl.innerText = cart[id] || 0;
 
-      document.getElementById('cart-badge').innerText = `${totalCount} items`;
-      document.getElementById('total-price').innerText = `₦${totalPrice.toLocaleString()}`;
+      updateTotal();
     }
 
-    function checkout() {
-      const items = Object.entries(cart).map(([pId, qty]) => {
-        let prod = products.find(p => p.id === pId);
-        return prod ? `• ${prod.title} (x${qty}) - ₦${(prod.price * qty).toLocaleString()}` : '';
-      }).filter(Boolean);
+    function updateTotal() {
+      let total = 0;
+      let count = 0;
 
-      if (items.length === 0) {
-        alert('Please add items to your cart first!');
+      products.forEach(p => {
+        if (cart[p.id]) {
+          total += p.price * cart[p.id];
+          count += cart[p.id];
+        }
+      });
+
+      document.getElementById('total-price').innerText = `₦${total.toLocaleString()}`;
+      document.getElementById('cart-count').innerText = `${count} items`;
+    }
+
+    function checkoutWhatsApp() {
+      const items = products.filter(p => cart[p.id]);
+      if (!items.length) {
+        alert('Please add at least one item to your cart!');
         return;
       }
 
-      let totalPrice = document.getElementById('total-price').innerText;
-      let text = `Hello *${vendorData.store_name}*,\n\nI would like to place an order:\n\n${items.join('\n')}\n\n*Total:* ${totalPrice}\n\nPlease confirm availability and payment details!`;
+      if (!vendorData || !vendorData.phone_number) {
+        alert('Vendor contact information unavailable.');
+        return;
+      }
 
-      let whatsappUrl = `https://wa.me/${vendorData.phone_number}?text=${encodeURIComponent(text)}`;
-      window.open(whatsappUrl, '_blank');
+      let text = `Hello *${vendorData.store_name}*, I'd like to place an order:\n\n`;
+      let grandTotal = 0;
+
+      items.forEach(p => {
+        const qty = cart[p.id];
+        const subtotal = p.price * qty;
+        grandTotal += subtotal;
+        text += `• ${p.name} (x${qty}) - ₦${subtotal.toLocaleString()}\n`;
+      });
+
+      text += `\n*Total:* ₦${grandTotal.toLocaleString()}`;
+
+      const phone = vendorData.phone_number.replace(/[^0-9]/g, '');
+      const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+      window.open(waUrl, '_blank');
     }
 
     loadStore();
   </script>
 </body>
 </html>
-
