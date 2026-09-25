@@ -4,11 +4,9 @@ const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 
-// Initialize Supabase Connection
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -19,7 +17,7 @@ app.get('/', (req, res) => {
   res.json({ message: 'WhatsApp SaaS Backend is running smoothly!' });
 });
 
-// 2. Fetch Vendor Storefront & Products Endpoint (MISSING ROUTE)
+// 2. Fetch Vendor Storefront & Products Endpoint
 app.get('/api/vendor/:slug', async (req, res) => {
   try {
     const { slug } = req.params;
@@ -29,10 +27,14 @@ app.get('/api/vendor/:slug', async (req, res) => {
       .from('vendors')
       .select('*')
       .eq('slug', slug)
-      .single();
+      .maybeSingle();
 
-    if (vendorErr || !vendor) {
-      return res.status(404).json({ error: 'Vendor not found' });
+    if (vendorErr) {
+      return res.status(500).json({ error: 'Database error fetching vendor', details: vendorErr });
+    }
+
+    if (!vendor) {
+      return res.status(404).json({ error: 'Vendor not found in database', queried_slug: slug });
     }
 
     // Fetch products belonging to vendor
@@ -42,12 +44,12 @@ app.get('/api/vendor/:slug', async (req, res) => {
       .eq('vendor_id', vendor.id);
 
     if (productErr) {
-      return res.status(500).json({ error: 'Failed to fetch products' });
+      return res.status(500).json({ error: 'Database error fetching products', details: productErr });
     }
 
     res.json({ vendor, products });
   } catch (err) {
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: 'Server error', message: err.message });
   }
 });
 
